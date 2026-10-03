@@ -68,6 +68,9 @@ static NameKeyType buttonMapStartPositionID[MAX_SLOTS] = { NAMEKEY_INVALID,NAMEK
 
 static GameWindow *winMapWindow = nullptr;
 
+static MapFavoritesButtons mapFavoritesButtons;
+static Bool usingSystemMaps = TRUE;
+
 static void NullifyControls()
 {
 	parent = nullptr;
@@ -81,6 +84,14 @@ static void NullifyControls()
 	{
 		buttonMapStartPosition[i] = nullptr;
 	}
+	mapFavoritesButtons.clear();
+}
+
+static void populateWOLMapList( Bool useSystemMaps, const AsciiString& mapToSelect )
+{
+	usingSystemMaps = useSystemMaps;
+	populateMapListbox( mapList, useSystemMaps, TRUE, mapToSelect );
+	mapFavoritesButtons.updateFromSelection();
 }
 
 static const char *layoutFilename = "GameSpyGameOptionsMenu.wnd";
@@ -185,9 +196,11 @@ void WOLMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ) );
+
 		if (TheMapCache)
 			TheMapCache->updateCache();
-		populateMapListbox( mapList, usesSystemMapDir, TRUE, TheGameSpyGame->getMap() );
+		populateWOLMapList( usesSystemMapDir, TheGameSpyGame->getMap() );
 	}
 
 }
@@ -344,6 +357,8 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 				Int controlID = control->winGetWindowId();
 				if( controlID == listboxMap )
 				{
+					mapFavoritesButtons.updateFromSelection();
+
 					int rowSelected = mData2;
 					if( rowSelected < 0 )
 					{
@@ -385,7 +400,16 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			GameWindow *control = (GameWindow *)mData1;
 			Int controlID = control->winGetWindowId();
 
-			if( controlID == buttonBack )
+			if ( mapFavoritesButtons.isFavoritesButton( control ) )
+			{
+				AsciiString mapToSelect = mapFavoritesButtons.getSelectedMap();
+				if (mapToSelect.isEmpty())
+					mapToSelect = TheGameSpyGame->getMap();
+
+				if (mapFavoritesButtons.onButtonSelected( control ))
+					populateWOLMapList( usingSystemMaps, mapToSelect );
+			}
+			else if( controlID == buttonBack )
 			{
 				showGameSpyGameOptionsUnderlyingGUIElements( TRUE );
 
@@ -402,7 +426,7 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, TRUE, TRUE, TheGameSpyGame->getMap() );
+				populateWOLMapList( TRUE, TheGameSpyGame->getMap() );
 				CustomMatchPreferences pref;
 				pref.setUsesSystemMapDir(TRUE);
 				pref.write();
@@ -411,7 +435,7 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, FALSE, TRUE, TheGameSpyGame->getMap() );
+				populateWOLMapList( FALSE, TheGameSpyGame->getMap() );
 				CustomMatchPreferences pref;
 				pref.setUsesSystemMapDir(FALSE);
 				pref.write();
