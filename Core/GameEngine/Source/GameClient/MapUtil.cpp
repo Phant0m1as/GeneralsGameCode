@@ -49,6 +49,7 @@
 #include "Common/ThingTemplate.h"
 #include "Common/MapObject.h"
 #include "Common/UserPreferences.h"
+#include "Common/Registry.h"
 #include "GameClient/GameText.h"
 #include "GameClient/WindowLayout.h"
 #include "GameClient/Gadget.h"
@@ -752,10 +753,38 @@ static const char *const s_mapFavoritesUserDataPrefix = "userdata:";
 
 // Colors and labels of the favorites UI. Change these to taste.
 static const Color s_mapFavoriteColor = GameMakeColor(255, 200, 40, 255); // gold
-static const wchar_t *const s_textAddFavorite = L"Als Favorit";
-static const wchar_t *const s_textRemoveFavorite = L"Kein Favorit";
-static const wchar_t *const s_textFilterOff = L"Nur Favoriten: Aus";
-static const wchar_t *const s_textFilterOn = L"Nur Favoriten: An";
+
+// Button labels. German texts are used when the game language is German, English otherwise.
+enum MapFavoritesText
+{
+	MAP_FAVORITES_TEXT_ADD,
+	MAP_FAVORITES_TEXT_REMOVE,
+	MAP_FAVORITES_TEXT_FILTER_OFF,
+	MAP_FAVORITES_TEXT_FILTER_ON,
+	MAP_FAVORITES_TEXT_COUNT
+};
+
+static const wchar_t *const s_mapFavoritesTextsGerman[MAP_FAVORITES_TEXT_COUNT] =
+{
+	L"Als Favorit",
+	L"Kein Favorit",
+	L"Nur Favoriten: Aus",
+	L"Nur Favoriten: An",
+};
+
+static const wchar_t *const s_mapFavoritesTextsEnglish[MAP_FAVORITES_TEXT_COUNT] =
+{
+	L"Add Favorite",
+	L"Remove Favorite",
+	L"Favorites Only: Off",
+	L"Favorites Only: On",
+};
+
+static UnicodeString getMapFavoritesText( MapFavoritesText text )
+{
+	const Bool isGerman = GetRegistryLanguage().compareNoCase("german") == 0;
+	return UnicodeString( isGerman ? s_mapFavoritesTextsGerman[text] : s_mapFavoritesTextsEnglish[text] );
+}
 
 //-------------------------------------------------------------------------------------------------
 class MapFavoritesPreferences : public UserPreferences
@@ -1638,16 +1667,16 @@ void MapFavoritesButtons::updateFromSelection()
 	const AsciiString mapName = getSelectedMap();
 	if (mapName.isEmpty())
 	{
-		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textAddFavorite) );
+		GadgetButtonSetText( m_buttonFavorite, getMapFavoritesText(MAP_FAVORITES_TEXT_ADD) );
 		m_buttonFavorite->winEnable( FALSE );
 		return;
 	}
 
 	m_buttonFavorite->winEnable( TRUE );
 	if (isMapFavorite( mapName ))
-		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textRemoveFavorite) );
+		GadgetButtonSetText( m_buttonFavorite, getMapFavoritesText(MAP_FAVORITES_TEXT_REMOVE) );
 	else
-		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textAddFavorite) );
+		GadgetButtonSetText( m_buttonFavorite, getMapFavoritesText(MAP_FAVORITES_TEXT_ADD) );
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1675,5 +1704,5 @@ void MapFavoritesButtons::updateFilterButtonText()
 		return;
 
 	GadgetButtonSetText( m_buttonFilter,
-		UnicodeString(getMapFavoritesFilter() ? s_textFilterOn : s_textFilterOff) );
+		getMapFavoritesText(getMapFavoritesFilter() ? MAP_FAVORITES_TEXT_FILTER_ON : MAP_FAVORITES_TEXT_FILTER_OFF) );
 }
