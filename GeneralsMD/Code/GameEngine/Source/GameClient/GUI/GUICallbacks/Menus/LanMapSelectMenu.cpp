@@ -62,6 +62,9 @@ static NameKeyType buttonMapStartPositionID[MAX_SLOTS] = { NAMEKEY_INVALID,NAMEK
 																										NAMEKEY_INVALID,NAMEKEY_INVALID,
 																										NAMEKEY_INVALID,NAMEKEY_INVALID };
 
+static MapFavoritesButtons mapFavoritesButtons;
+static Bool usingSystemMaps = TRUE;
+
 
 // PUBLIC FUNCTIONS ///////////////////////////////////////////////////////////////////////////////
 void positionStartSpots( AsciiString mapName, GameWindow *buttonMapStartPositions[], GameWindow *mapWindow);
@@ -111,6 +114,14 @@ static void NullifyControls()
 	{
 		buttonMapStartPosition[i] = nullptr;
 	}
+	mapFavoritesButtons.clear();
+}
+
+static void populateLanMapList( Bool useSystemMaps, const AsciiString& mapToSelect )
+{
+	usingSystemMaps = useSystemMaps;
+	populateMapListbox( mapList, useSystemMaps, TRUE, mapToSelect );
+	mapFavoritesButtons.updateFromSelection();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -167,9 +178,11 @@ void LanMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ) );
+
 		if (TheMapCache)
 			TheMapCache->updateCache();
-		populateMapListbox( mapList, usesSystemMapDir, TRUE, TheLAN->GetMyGame()->getMap() );
+		populateLanMapList( usesSystemMapDir, TheLAN->GetMyGame()->getMap() );
 	}
 }
 
@@ -318,11 +331,20 @@ WindowMsgHandledType LanMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			GameWindow *control = (GameWindow *)mData1;
 			Int controlID = control->winGetWindowId();
 
-			if ( controlID == radioButtonSystemMapsID )
+			if ( mapFavoritesButtons.isFavoritesButton( control ) )
+			{
+				AsciiString mapToSelect = mapFavoritesButtons.getSelectedMap();
+				if (mapToSelect.isEmpty())
+					mapToSelect = TheLAN->GetMyGame()->getMap();
+
+				if (mapFavoritesButtons.onButtonSelected( control ))
+					populateLanMapList( usingSystemMaps, mapToSelect );
+			}
+			else if ( controlID == radioButtonSystemMapsID )
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, TRUE, TRUE, TheLAN->GetMyGame()->getMap() );
+				populateLanMapList( TRUE, TheLAN->GetMyGame()->getMap() );
 				LANPreferences pref;
 				pref["UseSystemMapDir"] = "yes";
 				pref.write();
@@ -331,7 +353,7 @@ WindowMsgHandledType LanMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, FALSE, TRUE, TheLAN->GetMyGame()->getMap() );
+				populateLanMapList( FALSE, TheLAN->GetMyGame()->getMap() );
 				LANPreferences pref;
 				pref["UseSystemMapDir"] = "no";
 				pref.write();
@@ -416,6 +438,8 @@ WindowMsgHandledType LanMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 				Int controlID = control->winGetWindowId();
 				if( controlID == listboxMap )
 				{
+					mapFavoritesButtons.updateFromSelection();
+
 					int rowSelected = mData2;
 					if( rowSelected < 0 )
 					{

@@ -64,6 +64,9 @@ static NameKeyType buttonMapStartPositionID[MAX_SLOTS] = { NAMEKEY_INVALID,NAMEK
 static GameWindow *winMapPreview = nullptr;
 static NameKeyType winMapPreviewID = NAMEKEY_INVALID;
 
+static MapFavoritesButtons mapFavoritesButtons;
+static Bool usingSystemMaps = TRUE;
+
 static void NullifyControls()
 {
 	parent = nullptr;
@@ -77,6 +80,22 @@ static void NullifyControls()
 	{
 		buttonMapStartPosition[i] = nullptr;
 	}
+	mapFavoritesButtons.clear();
+}
+
+static void populateSkirmishMapList( Bool useSystemMaps, const AsciiString& mapToSelect )
+{
+	usingSystemMaps = useSystemMaps;
+	if (useSystemMaps)
+	{
+		populateMapListbox( mapList, TRUE, TRUE, mapToSelect );
+	}
+	else
+	{
+		populateMapListbox( mapList, FALSE, FALSE, mapToSelect );
+		populateMapListboxNoReset( mapList, FALSE, TRUE, mapToSelect );
+	}
+	mapFavoritesButtons.updateFromSelection();
 }
 
 extern WindowLayout *skirmishMapSelectLayout;
@@ -299,17 +318,11 @@ void SkirmishMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ) );
+
 		if (TheMapCache)
 			TheMapCache->updateCache();
-		if (usesSystemMapDir)
-		{
-			populateMapListbox( mapList, TRUE, TRUE, TheSkirmishGameInfo->getMap() );
-		}
-		else
-		{
-			populateMapListbox( mapList, FALSE, FALSE, TheSkirmishGameInfo->getMap() );
-			populateMapListboxNoReset( mapList, FALSE, TRUE, TheSkirmishGameInfo->getMap() );
-		}
+		populateSkirmishMapList( usesSystemMapDir, TheSkirmishGameInfo->getMap() );
 		mapList->winSetTooltipFunc(mapListTooltipFunc);
 	}
 
@@ -457,6 +470,8 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 				Int controlID = control->winGetWindowId();
 				if( controlID == listboxMap )
 				{
+					mapFavoritesButtons.updateFromSelection();
+
 					int rowSelected = mData2;
 					if( rowSelected < 0 )
 					{
@@ -500,11 +515,20 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 			GameWindow *control = (GameWindow *)mData1;
 			Int controlID = control->winGetWindowId();
 
-			if ( controlID == radioButtonSystemMapsID )
+			if ( mapFavoritesButtons.isFavoritesButton( control ) )
+			{
+				AsciiString mapToSelect = mapFavoritesButtons.getSelectedMap();
+				if (mapToSelect.isEmpty())
+					mapToSelect = TheSkirmishGameInfo->getMap();
+
+				if (mapFavoritesButtons.onButtonSelected( control ))
+					populateSkirmishMapList( usingSystemMaps, mapToSelect );
+			}
+			else if ( controlID == radioButtonSystemMapsID )
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, TRUE, TRUE, TheSkirmishGameInfo->getMap() );
+				populateSkirmishMapList( TRUE, TheSkirmishGameInfo->getMap() );
 				//LANPreferences pref;
 				//pref["UseSystemMapDir"] = "yes";
 				//pref.write();
@@ -513,8 +537,7 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 			{
 				if (TheMapCache)
 					TheMapCache->updateCache();
-				populateMapListbox( mapList, FALSE, FALSE, TheSkirmishGameInfo->getMap() );
-				populateMapListboxNoReset( mapList, FALSE, TRUE, TheSkirmishGameInfo->getMap() );
+				populateSkirmishMapList( FALSE, TheSkirmishGameInfo->getMap() );
 				//LANPreferences pref;
 				//pref["UseSystemMapDir"] = "no";
 				//pref.write();

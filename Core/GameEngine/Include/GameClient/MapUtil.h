@@ -148,3 +148,44 @@ Bool parseMapPreviewChunk(DataChunkInput &file, DataChunkInfo *info, void *userD
 void findDrawPositions( Int startX, Int startY, Int width, Int height, Region3D extent,
 															 ICoord2D *ul, ICoord2D *lr );
 Bool WouldMapTransfer( const AsciiString& mapName );
+
+// Map favorites: the player can mark maps as favorites in the map selection menus and filter the
+// map list to only show favorites. Favorites are stored locally in "MapFavorites.ini" in the user
+// data directory. Favorites of maps that no longer exist are simply never shown.
+Bool isMapFavorite( const AsciiString& mapName );
+void setMapFavorite( const AsciiString& mapName, Bool favorite );
+Bool getMapFavoritesFilter();												///< TRUE if the map lists only show favorites
+void setMapFavoritesFilter( Bool favoritesOnly );
+
+/// Creates and handles the two favorites buttons below a map listbox.
+class MapFavoritesButtons
+{
+public:
+	MapFavoritesButtons();
+
+	/// Creates the buttons below the map listbox. The listbox is made smaller to make room for them.
+	/// The buttons copy the look of templateButton. Call before populating the map listbox.
+	void create( GameWindow *mapListbox, GameWindow *templateButton );
+
+	/// Forgets the window pointers. The windows themselves are destroyed together with the layout.
+	void clear();
+
+	Bool isFavoritesButton( const GameWindow *control ) const;
+
+	/// Handles a click on one of the favorites buttons.
+	/// Returns TRUE if the caller must repopulate the map listbox.
+	Bool onButtonSelected( const GameWindow *control );
+
+	/// Updates the label of the favorite button for the currently selected map.
+	void updateFromSelection();
+
+	/// Returns the file name of the currently selected map, or an empty string.
+	AsciiString getSelectedMap() const;
+
+private:
+	void updateFilterButtonText();
+
+	GameWindow *m_listbox;
+	GameWindow *m_buttonFavorite;
+	GameWindow *m_buttonFilter;
+};
