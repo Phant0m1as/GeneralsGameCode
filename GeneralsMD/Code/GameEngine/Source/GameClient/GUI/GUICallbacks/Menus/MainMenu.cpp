@@ -44,6 +44,8 @@
 #include "GameClient/ExtendedMessageBox.h"
 #include "GameClient/MessageBox.h"
 #include "GameClient/Display.h"
+#include "GameClient/DisplayString.h"
+#include "GameClient/DisplayStringManager.h"
 #include "GameClient/WindowLayout.h"
 #include "GameClient/Gadget.h"
 #include "GameClient/GameText.h"
@@ -426,6 +428,71 @@ static void initLabelVersion()
 	}
 }
 
+// Phantomias-Version: small label in the bottom right corner of the main menu that shows this is
+// a custom build. The build number is the git commit count, followed by the short commit hash.
+// A "~" in front means the exe was built with uncommitted changes.
+static void initPhantomiasVersionLabel()
+{
+	if (parentMainMenu == nullptr || TheVersion == nullptr || TheDisplayStringManager == nullptr)
+		return;
+
+	UnicodeString text;
+	text.format( L"Phantomias-Version Build %s (%s)",
+		TheVersion->getUnicodeGitCommitCount().str(),
+		TheVersion->getUnicodeGitShortHash().str() );
+
+	// The main menu can be initialized several times. Reuse the label if it already exists.
+	const NameKeyType labelID = TheNameKeyGenerator->nameToKey( "MainMenu.wnd:PhantomiasVersionLabel" );
+	GameWindow *label = TheWindowManager->winGetWindowFromId( parentMainMenu, labelID );
+	if (label != nullptr)
+	{
+		GadgetStaticTextSetText( label, text );
+		return;
+	}
+
+	GameFont *font = TheWindowManager->winFindFont( "Arial", 10, FALSE );
+
+	// Measure the text so that it can be right aligned.
+	Int textWidth = 300;
+	Int textHeight = 14;
+	DisplayString *measure = TheDisplayStringManager->newDisplayString();
+	if (measure != nullptr)
+	{
+		measure->setFont( font );
+		measure->setText( text );
+		measure->getSize( &textWidth, &textHeight );
+		TheDisplayStringManager->freeDisplayString( measure );
+	}
+
+	Int parentWidth, parentHeight;
+	parentMainMenu->winGetSize( &parentWidth, &parentHeight );
+
+	const Int margin = 6;
+	const Int width = textWidth + 4;
+	const Int height = textHeight + 2;
+
+	WinInstanceData instData;
+	instData.init();
+	BitSet( instData.m_style, GWS_STATIC_TEXT );
+	instData.m_enabledText.color = GameMakeColor( 200, 200, 200, 160 );     // light gray, slightly transparent
+	instData.m_enabledText.borderColor = GameMakeColor( 0, 0, 0, 160 );   // dark outline for readability
+
+	TextData textData;
+	memset( &textData, 0, sizeof(textData) );
+
+	label = TheWindowManager->gogoGadgetStaticText( parentMainMenu,
+		WIN_STATUS_ENABLED | WIN_STATUS_NO_INPUT,
+		parentWidth - width - margin, parentHeight - height - margin,
+		width, height,
+		&instData, &textData, font, FALSE );
+
+	if (label != nullptr)
+	{
+		label->winSetWindowId( labelID );
+		GadgetStaticTextSetText( label, text );
+	}
+}
+
 //-------------------------------------------------------------------------------------------------
 /** Initialize the main menu */
 //-------------------------------------------------------------------------------------------------
@@ -556,6 +623,7 @@ void MainMenuInit( WindowLayout *layout, void *userData )
 #endif
 
 	initLabelVersion();
+	initPhantomiasVersionLabel();
 
 	//TheShell->registerWithAnimateManager(buttonCampaign, WIN_ANIMATION_SLIDE_LEFT, TRUE, 800);
 	//TheShell->registerWithAnimateManager(buttonSkirmish, WIN_ANIMATION_SLIDE_LEFT, TRUE, 600);
