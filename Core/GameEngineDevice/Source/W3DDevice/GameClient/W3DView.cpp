@@ -2238,7 +2238,22 @@ void W3DView::setDefaultView(Real pitch, Real angle, Real maxHeight)
 	// MDC - we no longer want to rotate maps (design made all of them right to begin with)
 	//	m_defaultAngle = angle * M_PI/180.0f;
 	setDefaultPitch(pitch);
-	m_maxHeightAboveGround = TheGlobalData->m_maxCameraHeight*maxHeight;
+
+	// Camera height like Generals Online: base max height of 310 (GO default), scaled up for
+	// screens wider than 4:3. At 16:9 this gives about 448, at 21:9 about 630.
+	// Change GO_STYLE_MAX_CAMERA_HEIGHT to taste (GO allows 210 to 1000 in its lobbies).
+	const Real GO_STYLE_MAX_CAMERA_HEIGHT = 310.0f;
+	TheWritableGlobalData->m_maxCameraHeight = GO_STYLE_MAX_CAMERA_HEIGHT;
+
+	Real aspectWidthScale = 1.0f;
+	if (TheDisplay != nullptr && TheDisplay->getHeight() > 0)
+	{
+		const Real baseAspectRatio = 800.0f / 600.0f;
+		const Real currentAspectRatio = (Real)TheDisplay->getWidth() / (Real)TheDisplay->getHeight();
+		aspectWidthScale = fabs(1.0f + (currentAspectRatio - baseAspectRatio));
+	}
+
+	m_maxHeightAboveGround = TheGlobalData->m_maxCameraHeight*maxHeight*aspectWidthScale;
 	if (m_minHeightAboveGround > m_maxHeightAboveGround)
 		m_maxHeightAboveGround = m_minHeightAboveGround;
 }

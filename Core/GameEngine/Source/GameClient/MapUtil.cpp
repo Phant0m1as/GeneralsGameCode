@@ -48,9 +48,11 @@
 #include "Common/ThingFactory.h"
 #include "Common/ThingTemplate.h"
 #include "Common/MapObject.h"
+#include "Common/UserPreferences.h"
 #include "GameClient/GameText.h"
 #include "GameClient/WindowLayout.h"
 #include "GameClient/Gadget.h"
+#include "GameClient/GadgetPushButton.h"
 #include "GameClient/Image.h"
 #include "GameClient/Shell.h"
 #include "GameClient/GameWindowManager.h"
@@ -741,6 +743,122 @@ static void buildMapListForNumPlayers(MapNameList &outMapNames, MapDisplayToFile
 }
 
 //-------------------------------------------------------------------------------------------------
+// Map favorites
+//-------------------------------------------------------------------------------------------------
+static const char *const s_mapFavoritesFileName = "MapFavorites.ini";
+static const char *const s_mapFavoritesFilterKey = "FilterFavoritesOnly";
+static const char *const s_mapFavoritesMapKeyPrefix = "Map:";
+static const char *const s_mapFavoritesUserDataPrefix = "userdata:";
+
+// Colors and labels of the favorites UI. Change these to taste.
+static const Color s_mapFavoriteColor = GameMakeColor(255, 200, 40, 255); // gold
+static const wchar_t *const s_textAddFavorite = L"Als Favorit";
+static const wchar_t *const s_textRemoveFavorite = L"Kein Favorit";
+static const wchar_t *const s_textFilterOff = L"Nur Favoriten: Aus";
+static const wchar_t *const s_textFilterOn = L"Nur Favoriten: An";
+
+//-------------------------------------------------------------------------------------------------
+class MapFavoritesPreferences : public UserPreferences
+{
+public:
+	MapFavoritesPreferences()
+	{
+		load(s_mapFavoritesFileName);
+	}
+
+	Bool isFavorite( const AsciiString& mapName ) const
+	{
+		if (mapName.isEmpty())
+			return FALSE;
+		return find(makeKey(mapName)) != end();
+	}
+
+	void setFavorite( const AsciiString& mapName, Bool favorite )
+	{
+		if (mapName.isEmpty())
+			return;
+		if (favorite)
+			(*this)[makeKey(mapName)] = "yes";
+		else
+			erase(makeKey(mapName));
+	}
+
+	Bool getFilter() const
+	{
+		return getBool(s_mapFavoritesFilterKey, FALSE);
+	}
+
+	void setFilter( Bool favoritesOnly )
+	{
+		setBool(s_mapFavoritesFilterKey, favoritesOnly);
+	}
+
+private:
+	// Map names of user maps contain the full path to the user data directory.
+	// Store them relative to it so that the favorites survive a moved user data directory.
+	static AsciiString makeKey( const AsciiString& mapName )
+	{
+		AsciiString name = mapName;
+		name.toLower();
+
+		AsciiString userDataDir = TheGlobalData->getPath_UserData();
+		userDataDir.toLower();
+
+		AsciiString key = s_mapFavoritesMapKeyPrefix;
+		if (userDataDir.isNotEmpty() && name.startsWith(userDataDir))
+		{
+			key.concat(s_mapFavoritesUserDataPrefix);
+			key.concat(name.str() + userDataDir.getLength());
+		}
+		else
+		{
+			key.concat(name);
+		}
+		return key;
+	}
+};
+
+// -1 = not yet loaded from file. A plain Int is used on purpose to avoid static objects with
+// constructors and destructors, which do not mix well with the game's memory manager.
+static Int s_mapFavoritesFilter = -1;
+
+//-------------------------------------------------------------------------------------------------
+Bool isMapFavorite( const AsciiString& mapName )
+{
+	MapFavoritesPreferences favorites;
+	return favorites.isFavorite(mapName);
+}
+
+//-------------------------------------------------------------------------------------------------
+void setMapFavorite( const AsciiString& mapName, Bool favorite )
+{
+	MapFavoritesPreferences favorites;
+	favorites.setFavorite(mapName, favorite);
+	favorites.write(); // Failing to write is not critical, the favorite is then just not stored.
+}
+
+//-------------------------------------------------------------------------------------------------
+Bool getMapFavoritesFilter()
+{
+	if (s_mapFavoritesFilter < 0)
+	{
+		MapFavoritesPreferences favorites;
+		s_mapFavoritesFilter = favorites.getFilter() ? 1 : 0;
+	}
+	return s_mapFavoritesFilter != 0;
+}
+
+//-------------------------------------------------------------------------------------------------
+void setMapFavoritesFilter( Bool favoritesOnly )
+{
+	s_mapFavoritesFilter = favoritesOnly ? 1 : 0;
+
+	MapFavoritesPreferences favorites;
+	favorites.setFilter(favoritesOnly);
+	favorites.write();
+}
+
+//-------------------------------------------------------------------------------------------------
 struct MapListBoxData
 {
 	MapListBoxData()
@@ -758,6 +876,8 @@ struct MapListBoxData
 		, mapToSelect()
 		, selectionIndex(0) // always select *something*
 		, isMultiplayer(false)
+		, favorites(nullptr)
+		, favoritesOnly(false)
 	{
 	}
 
@@ -775,6 +895,8 @@ struct MapListBoxData
 	AsciiString mapToSelect;
 	Int selectionIndex;
 	Bool isMultiplayer;
+	const MapFavoritesPreferences *favorites;
+	Bool favoritesOnly;
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -788,6 +910,16 @@ static Bool addMapToMapListbox(
 
 	if (mapOk)
 	{
+		const Bool isFavorite = lbData.favorites != nullptr && lbData.favorites->isFavorite(mapName);
+
+		// Skip non-favorites when the favorites filter is active.
+		if (lbData.favoritesOnly && !isFavorite)
+		{
+			return true;
+		}
+
+		const Color textColor = isFavorite ? s_mapFavoriteColor : lbData.color;
+
 		UnicodeString mapDisplayName;
 		/// @todo: mapDisplayName = TheGameText->fetch(mapMetaData.m_displayName.str());
 		mapDisplayName = mapMetaData.m_displayName;
@@ -830,7 +962,7 @@ static Bool addMapToMapListbox(
 			}
 		}
 
-		index = GadgetListBoxAddEntryText( lbData.listbox, mapDisplayName, lbData.color, index, lbData.numColumns-1 );
+		index = GadgetListBoxAddEntryText( lbData.listbox, mapDisplayName, textColor, index, lbData.numColumns-1 );
 		DEBUG_ASSERTCRASH(index >= 0, ("Expects valid index"));
 
 		if (mapName == lbData.mapToSelect)
@@ -920,6 +1052,11 @@ Int populateMapListboxNoReset( GameWindow *listbox, Bool useSystemMaps, Bool isM
 	lbData.mapToSelect = mapToSelect;
 	lbData.isMultiplayer = isMultiplayer;
 
+	// Read the favorites file once for the whole list.
+	MapFavoritesPreferences favorites;
+	lbData.favorites = &favorites;
+	lbData.favoritesOnly = getMapFavoritesFilter();
+
 	if (lbData.numColumns > 1)
 	{
 		lbData.easyImage = TheMappedImageCollection->findImageByName("Star-Bronze");
@@ -964,6 +1101,13 @@ Int populateMapListboxNoReset( GameWindow *listbox, Bool useSystemMaps, Bool isM
 
 	delete lbData.battleHonors;
 	lbData.battleHonors = nullptr;
+
+	// With the favorites filter the list can be empty. Then explicitly select nothing, so that the
+	// menu clears the map preview and does not keep showing a map that is no longer in the list.
+	if (lbData.favoritesOnly && GadgetListBoxGetNumEntries(listbox) == 0)
+	{
+		lbData.selectionIndex = -1;
+	}
 
 	GadgetListBoxSetSelected(listbox, &lbData.selectionIndex, 1);
 
@@ -1351,3 +1495,185 @@ void findDrawPositions( Int startX, Int startY, Int width, Int height, Region3D 
 
 }
 
+//-------------------------------------------------------------------------------------------------
+// MapFavoritesButtons
+//-------------------------------------------------------------------------------------------------
+
+//-------------------------------------------------------------------------------------------------
+/** Creates a push button that looks like templateButton. */
+//-------------------------------------------------------------------------------------------------
+static GameWindow *createMapFavoritesButton( GameWindow *parent, GameWindow *owner, GameWindow *templateButton,
+	Int x, Int y, Int width, Int height )
+{
+	WinInstanceData *templateData = templateButton->winGetInstanceData();
+
+	// Copy only the visual data. Copying the whole instance data is not allowed,
+	// because it owns display strings.
+	WinInstanceData instData;
+	instData.init();
+	BitSet( instData.m_style, GWS_PUSH_BUTTON | GWS_MOUSE_TRACK );
+	for (Int i = 0; i < MAX_DRAW_DATA; ++i)
+	{
+		instData.m_enabledDrawData[i] = templateData->m_enabledDrawData[i];
+		instData.m_disabledDrawData[i] = templateData->m_disabledDrawData[i];
+		instData.m_hiliteDrawData[i] = templateData->m_hiliteDrawData[i];
+	}
+	instData.m_enabledText = templateData->m_enabledText;
+	instData.m_disabledText = templateData->m_disabledText;
+	instData.m_hiliteText = templateData->m_hiliteText;
+	instData.m_imageOffset = templateData->m_imageOffset;
+
+	const UnsignedInt status = WIN_STATUS_ENABLED | (templateButton->winGetStatus() & WIN_STATUS_IMAGE);
+
+	GameWindow *button = TheWindowManager->gogoGadgetPushButton( parent, status, x, y, width, height,
+		&instData, templateButton->winGetFont(), FALSE );
+
+	// Button clicks are sent to the owner. Use the same owner as the map listbox,
+	// so that the menu's system callback receives them.
+	if (button != nullptr && owner != nullptr)
+		button->winSetOwner( owner );
+
+	return button;
+}
+
+//-------------------------------------------------------------------------------------------------
+MapFavoritesButtons::MapFavoritesButtons()
+	: m_listbox(nullptr)
+	, m_buttonFavorite(nullptr)
+	, m_buttonFilter(nullptr)
+{
+}
+
+//-------------------------------------------------------------------------------------------------
+void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateButton )
+{
+	clear();
+
+	if (mapListbox == nullptr || templateButton == nullptr)
+		return;
+
+	GameWindow *parentWindow = mapListbox->winGetParent();
+	if (parentWindow == nullptr)
+		return;
+
+	Int listX, listY, listWidth, listHeight;
+	mapListbox->winGetPosition( &listX, &listY );
+	mapListbox->winGetSize( &listWidth, &listHeight );
+
+	Int templateWidth, templateHeight;
+	templateButton->winGetSize( &templateWidth, &templateHeight );
+
+	const Int gap = 4;
+	Int buttonHeight = templateHeight;
+	if (buttonHeight > listHeight / 4)
+		buttonHeight = listHeight / 4;
+	if (buttonHeight < 10 || listWidth < 40)
+		return; // Not enough room. Leave the menu as it is.
+
+	// Make room below the listbox. The buttons take the freed space, so they cannot overlap
+	// anything else in the menu.
+	mapListbox->winSetSize( listWidth, listHeight - buttonHeight - gap );
+
+	const Int buttonY = listY + listHeight - buttonHeight;
+	const Int favoriteWidth = (listWidth - gap) / 2;
+	const Int filterWidth = listWidth - favoriteWidth - gap;
+	GameWindow *owner = mapListbox->winGetOwner();
+
+	m_listbox = mapListbox;
+	m_buttonFavorite = createMapFavoritesButton( parentWindow, owner, templateButton,
+		listX, buttonY, favoriteWidth, buttonHeight );
+	m_buttonFilter = createMapFavoritesButton( parentWindow, owner, templateButton,
+		listX + favoriteWidth + gap, buttonY, filterWidth, buttonHeight );
+
+	updateFilterButtonText();
+	updateFromSelection();
+}
+
+//-------------------------------------------------------------------------------------------------
+void MapFavoritesButtons::clear()
+{
+	m_listbox = nullptr;
+	m_buttonFavorite = nullptr;
+	m_buttonFilter = nullptr;
+}
+
+//-------------------------------------------------------------------------------------------------
+Bool MapFavoritesButtons::isFavoritesButton( const GameWindow *control ) const
+{
+	return control != nullptr && (control == m_buttonFavorite || control == m_buttonFilter);
+}
+
+//-------------------------------------------------------------------------------------------------
+Bool MapFavoritesButtons::onButtonSelected( const GameWindow *control )
+{
+	if (control == nullptr)
+		return FALSE;
+
+	if (control == m_buttonFavorite)
+	{
+		const AsciiString mapName = getSelectedMap();
+		if (mapName.isEmpty())
+			return FALSE;
+
+		setMapFavorite( mapName, !isMapFavorite( mapName ) );
+		return TRUE;
+	}
+
+	if (control == m_buttonFilter)
+	{
+		setMapFavoritesFilter( !getMapFavoritesFilter() );
+		updateFilterButtonText();
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+//-------------------------------------------------------------------------------------------------
+void MapFavoritesButtons::updateFromSelection()
+{
+	if (m_buttonFavorite == nullptr)
+		return;
+
+	const AsciiString mapName = getSelectedMap();
+	if (mapName.isEmpty())
+	{
+		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textAddFavorite) );
+		m_buttonFavorite->winEnable( FALSE );
+		return;
+	}
+
+	m_buttonFavorite->winEnable( TRUE );
+	if (isMapFavorite( mapName ))
+		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textRemoveFavorite) );
+	else
+		GadgetButtonSetText( m_buttonFavorite, UnicodeString(s_textAddFavorite) );
+}
+
+//-------------------------------------------------------------------------------------------------
+AsciiString MapFavoritesButtons::getSelectedMap() const
+{
+	if (m_listbox == nullptr)
+		return AsciiString::TheEmptyString;
+
+	Int selected = -1;
+	GadgetListBoxGetSelected( m_listbox, &selected );
+	if (selected < 0)
+		return AsciiString::TheEmptyString;
+
+	const char *mapName = (const char *)GadgetListBoxGetItemData( m_listbox, selected );
+	if (mapName == nullptr)
+		return AsciiString::TheEmptyString;
+
+	return AsciiString(mapName);
+}
+
+//-------------------------------------------------------------------------------------------------
+void MapFavoritesButtons::updateFilterButtonText()
+{
+	if (m_buttonFilter == nullptr)
+		return;
+
+	GadgetButtonSetText( m_buttonFilter,
+		UnicodeString(getMapFavoritesFilter() ? s_textFilterOn : s_textFilterOff) );
+}
