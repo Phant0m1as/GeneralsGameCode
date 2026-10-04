@@ -94,6 +94,12 @@ static void populateWOLMapList( Bool useSystemMaps, const AsciiString& mapToSele
 	mapFavoritesButtons.updateFromSelection();
 }
 
+// Refills the map list in the current tab. Used by the map list tools (search and favorites).
+static void repopulateMapList( const AsciiString& mapToSelect )
+{
+	populateWOLMapList( usingSystemMaps, mapToSelect );
+}
+
 static const char *layoutFilename = "GameSpyGameOptionsMenu.wnd";
 static const char *parentName = "GameSpyGameOptionsMenuParent";
 static const char *gadgetsToHide[] =
@@ -196,7 +202,7 @@ void WOLMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
-		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ) );
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ), repopulateMapList );
 
 		if (TheMapCache)
 			TheMapCache->updateCache();
@@ -400,14 +406,9 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			GameWindow *control = (GameWindow *)mData1;
 			Int controlID = control->winGetWindowId();
 
-			if ( mapFavoritesButtons.isFavoritesButton( control ) )
+			if ( mapFavoritesButtons.onButtonSelected( control ) )
 			{
-				AsciiString mapToSelect = mapFavoritesButtons.getSelectedMap();
-				if (mapToSelect.isEmpty())
-					mapToSelect = TheGameSpyGame->getMap();
-
-				if (mapFavoritesButtons.onButtonSelected( control ))
-					populateWOLMapList( usingSystemMaps, mapToSelect );
+				// handled by the map list tools
 			}
 			else if( controlID == buttonBack )
 			{
@@ -498,6 +499,14 @@ WindowMsgHandledType WOLMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 
 			break;
 
+		}
+
+		//---------------------------------------------------------------------------------------------
+		case GEM_UPDATE_TEXT:
+		{
+			// the search field of the map list tools
+			mapFavoritesButtons.onTextChanged( (GameWindow *)mData1 );
+			break;
 		}
 
 		default:

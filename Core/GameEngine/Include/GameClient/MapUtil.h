@@ -157,24 +157,36 @@ void setMapFavorite( const AsciiString& mapName, Bool favorite );
 Bool getMapFavoritesFilter();												///< TRUE if the map lists only show favorites
 void setMapFavoritesFilter( Bool favoritesOnly );
 
-/// Creates and handles the two favorites buttons below a map listbox.
+// Map search: filters the map lists by a part of the map name (case insensitive).
+// The search text is not stored and is cleared every time a map selection menu is opened.
+Bool isMapSearchActive();
+
+/// Creates and handles the map list tools of a map selection menu: a search field with a clear
+/// button above the map listbox, and the two favorites buttons below it.
 class MapFavoritesButtons
 {
 public:
+	/// Called to refill the map listbox. mapToSelect is the map that should stay selected, if it is
+	/// still in the list. Otherwise nothing is selected.
+	typedef void (*RepopulateFunc)( const AsciiString& mapToSelect );
+
 	MapFavoritesButtons();
 
-	/// Creates the buttons below the map listbox. The listbox is made smaller to make room for them.
-	/// The buttons copy the look of templateButton. Call before populating the map listbox.
-	void create( GameWindow *mapListbox, GameWindow *templateButton );
+	/// Creates the search field above and the favorites buttons below the map listbox. The listbox
+	/// is made smaller to make room for them. The buttons copy the look of templateButton.
+	/// Clears the search text. Call before populating the map listbox.
+	void create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate );
 
 	/// Forgets the window pointers. The windows themselves are destroyed together with the layout.
 	void clear();
 
-	Bool isFavoritesButton( const GameWindow *control ) const;
-
-	/// Handles a click on one of the favorites buttons.
-	/// Returns TRUE if the caller must repopulate the map listbox.
+	/// Handles a click on one of the map list tool buttons. Repopulates the map listbox if needed.
+	/// Returns TRUE if the control was one of the map list tool buttons.
 	Bool onButtonSelected( const GameWindow *control );
+
+	/// Handles a change of the search text. Repopulates the map listbox.
+	/// Returns TRUE if the control was the search field.
+	Bool onTextChanged( const GameWindow *control );
 
 	/// Updates the label of the favorite button for the currently selected map.
 	void updateFromSelection();
@@ -184,8 +196,12 @@ public:
 
 private:
 	void updateFilterButtonText();
+	void repopulate();
 
 	GameWindow *m_listbox;
 	GameWindow *m_buttonFavorite;
 	GameWindow *m_buttonFilter;
+	GameWindow *m_searchEntry;
+	GameWindow *m_buttonClearSearch;
+	RepopulateFunc m_repopulate;
 };
