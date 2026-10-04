@@ -1886,7 +1886,8 @@ void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateBu
 		createMapSearchLabel( parentWindow, templateButton, labelFont, labelText,
 			listX, listY, labelWidth, rowHeight );
 	}
-	m_searchEntry = createMapSearchEntry( parentWindow, owner, templateButton, font,
+	// The search text uses the same font as the label.
+	m_searchEntry = createMapSearchEntry( parentWindow, owner, templateButton, labelFont,
 		entryX, listY, entryWidth, rowHeight );
 	m_buttonClearSearch = createMapFavoritesButton( parentWindow, owner, templateButton, font,
 		clearX, listY, clearWidth, rowHeight );
