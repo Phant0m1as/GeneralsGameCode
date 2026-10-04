@@ -51,6 +51,9 @@
 #include "Common/UserPreferences.h"
 #include "Common/Registry.h"
 #include "GameClient/GadgetTextEntry.h"
+#include "GameClient/GadgetStaticText.h"
+#include "GameClient/DisplayString.h"
+#include "GameClient/DisplayStringManager.h"
 
 #include <wctype.h>
 #include "GameClient/GameText.h"
@@ -766,6 +769,7 @@ enum MapFavoritesText
 	MAP_FAVORITES_TEXT_FILTER_ON,
 	MAP_FAVORITES_TEXT_SEARCH_TOOLTIP,
 	MAP_FAVORITES_TEXT_CLEAR_SEARCH_TOOLTIP,
+	MAP_FAVORITES_TEXT_SEARCH_LABEL,
 	MAP_FAVORITES_TEXT_COUNT
 };
 
@@ -777,6 +781,7 @@ static const wchar_t *const s_mapFavoritesTextsGerman[MAP_FAVORITES_TEXT_COUNT] 
 	L"Nur Favoriten: An",
 	L"Map-Namen filtern",
 	L"Suche l\u00F6schen",
+	L"Suche",
 };
 
 static const wchar_t *const s_mapFavoritesTextsEnglish[MAP_FAVORITES_TEXT_COUNT] =
@@ -787,6 +792,7 @@ static const wchar_t *const s_mapFavoritesTextsEnglish[MAP_FAVORITES_TEXT_COUNT]
 	L"Favorites Only: On",
 	L"Filter map names",
 	L"Clear search",
+	L"Search",
 };
 
 static UnicodeString getMapFavoritesText( MapFavoritesText text )
@@ -1762,6 +1768,52 @@ static GameWindow *createMapSearchEntry( GameWindow *parent, GameWindow *owner, 
 }
 
 //-------------------------------------------------------------------------------------------------
+/** Returns the width of text in pixels when drawn with font. */
+//-------------------------------------------------------------------------------------------------
+static Int getTextWidth( GameFont *font, const UnicodeString& text )
+{
+	Int width = 0;
+	Int height = 0;
+	DisplayString *measure = TheDisplayStringManager ? TheDisplayStringManager->newDisplayString() : nullptr;
+	if (measure != nullptr)
+	{
+		measure->setFont( font );
+		measure->setText( text );
+		measure->getSize( &width, &height );
+		TheDisplayStringManager->freeDisplayString( measure );
+	}
+	return width;
+}
+
+//-------------------------------------------------------------------------------------------------
+/** Creates the label in front of the search field. */
+//-------------------------------------------------------------------------------------------------
+static GameWindow *createMapSearchLabel( GameWindow *parent, GameWindow *templateButton, GameFont *font,
+	const UnicodeString& text, Int x, Int y, Int width, Int height )
+{
+	WinInstanceData *templateData = templateButton->winGetInstanceData();
+
+	WinInstanceData instData;
+	instData.init();
+	BitSet( instData.m_style, GWS_STATIC_TEXT );
+	instData.m_enabledText = templateData->m_enabledText;
+	if (instData.m_enabledText.color == WIN_COLOR_UNDEFINED)
+		instData.m_enabledText.color = GameMakeColor( 255, 255, 255, 255 );
+
+	TextData textData;
+	memset( &textData, 0, sizeof(textData) );
+	textData.centeredVertically = TRUE;
+
+	GameWindow *label = TheWindowManager->gogoGadgetStaticText( parent, WIN_STATUS_ENABLED | WIN_STATUS_NO_INPUT,
+		x, y, width, height, &instData, &textData, font, FALSE );
+
+	if (label != nullptr)
+		GadgetStaticTextSetText( label, text );
+
+	return label;
+}
+
+//-------------------------------------------------------------------------------------------------
 MapFavoritesButtons::MapFavoritesButtons()
 	: m_listbox(nullptr)
 	, m_buttonFavorite(nullptr)
@@ -1814,11 +1866,23 @@ void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateBu
 	m_listbox = mapListbox;
 	m_repopulate = repopulate;
 
-	// Search row: text entry with a small clear button on its right.
+	// Search row: label, text entry, and a small clear button on the right.
 	const Int clearWidth = rowHeight + 4;
-	const Int entryWidth = listWidth - clearWidth - gap;
+	const UnicodeString labelText = getMapFavoritesText( MAP_FAVORITES_TEXT_SEARCH_LABEL );
+	Int labelWidth = getTextWidth( font, labelText ) + 4;
+	if (labelWidth <= 4 || listWidth - labelWidth - clearWidth - 2 * gap < 40)
+		labelWidth = 0; // No room for the label. Show the search field only.
+
+	const Int entryX = labelWidth > 0 ? listX + labelWidth + gap : listX;
+	const Int entryWidth = listX + listWidth - clearWidth - gap - entryX;
+
+	if (labelWidth > 0)
+	{
+		createMapSearchLabel( parentWindow, templateButton, font, labelText,
+			listX, listY, labelWidth, rowHeight );
+	}
 	m_searchEntry = createMapSearchEntry( parentWindow, owner, templateButton, font,
-		listX, listY, entryWidth, rowHeight );
+		entryX, listY, entryWidth, rowHeight );
 	m_buttonClearSearch = createMapFavoritesButton( parentWindow, owner, templateButton, font,
 		listX + entryWidth + gap, listY, clearWidth, rowHeight );
 	if (m_buttonClearSearch != nullptr)
