@@ -793,6 +793,7 @@ public:
 	MapFavoritesPreferences()
 	{
 		load(s_mapFavoritesFileName);
+		removeBrokenEntries();
 	}
 
 	Bool isFavorite( const AsciiString& mapName ) const
@@ -833,17 +834,43 @@ private:
 		AsciiString userDataDir = TheGlobalData->getPath_UserData();
 		userDataDir.toLower();
 
+		const char *path = name.str();
 		AsciiString key = s_mapFavoritesMapKeyPrefix;
 		if (userDataDir.isNotEmpty() && name.startsWith(userDataDir))
 		{
 			key.concat(s_mapFavoritesUserDataPrefix);
-			key.concat(name.str() + userDataDir.getLength());
+			path += userDataDir.getLength();
 		}
-		else
+
+		// The preferences file uses '=' to separate key and value, so a map path containing '='
+		// (for example a folder named "= Skirmish =") would be cut apart when the file is read
+		// again. Escape '%' and '=' in the path to keep the key intact.
+		for (; *path != '\0'; ++path)
 		{
-			key.concat(name);
+			if (*path == '%')
+				key.concat("%25");
+			else if (*path == '=')
+				key.concat("%3D");
+			else
+				key.concat(*path);
 		}
 		return key;
+	}
+
+	// Removes map entries that cannot be valid favorites, e.g. lines from older versions that
+	// were cut apart at a '=' in the map path. They would otherwise stay in the file forever.
+	void removeBrokenEntries()
+	{
+		const Int prefixLength = (Int)strlen(s_mapFavoritesMapKeyPrefix);
+		iterator it = begin();
+		while (it != end())
+		{
+			const Bool isMapEntry = strncmp(it->first.str(), s_mapFavoritesMapKeyPrefix, prefixLength) == 0;
+			if (isMapEntry && (it->second.compareNoCase("yes") != 0 || !it->first.endsWithNoCase(".map")))
+				erase(it++);
+			else
+				++it;
+		}
 	}
 };
 
