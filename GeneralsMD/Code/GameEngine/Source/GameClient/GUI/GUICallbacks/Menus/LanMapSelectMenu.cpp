@@ -124,6 +124,12 @@ static void populateLanMapList( Bool useSystemMaps, const AsciiString& mapToSele
 	mapFavoritesButtons.updateFromSelection();
 }
 
+// Refills the map list in the current tab. Used by the map list tools (search and favorites).
+static void repopulateMapList( const AsciiString& mapToSelect )
+{
+	populateLanMapList( usingSystemMaps, mapToSelect );
+}
+
 //-------------------------------------------------------------------------------------------------
 /** Initialize the MapSelect menu */
 //-------------------------------------------------------------------------------------------------
@@ -178,7 +184,7 @@ void LanMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
-		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ) );
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ), repopulateMapList );
 
 		if (TheMapCache)
 			TheMapCache->updateCache();
@@ -331,14 +337,9 @@ WindowMsgHandledType LanMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 			GameWindow *control = (GameWindow *)mData1;
 			Int controlID = control->winGetWindowId();
 
-			if ( mapFavoritesButtons.isFavoritesButton( control ) )
+			if ( mapFavoritesButtons.onButtonSelected( control ) )
 			{
-				AsciiString mapToSelect = mapFavoritesButtons.getSelectedMap();
-				if (mapToSelect.isEmpty())
-					mapToSelect = TheLAN->GetMyGame()->getMap();
-
-				if (mapFavoritesButtons.onButtonSelected( control ))
-					populateLanMapList( usingSystemMaps, mapToSelect );
+				// handled by the map list tools
 			}
 			else if ( controlID == radioButtonSystemMapsID )
 			{
@@ -475,6 +476,14 @@ WindowMsgHandledType LanMapSelectMenuSystem( GameWindow *window, UnsignedInt msg
 				}
 				break;
 			}
+
+		//---------------------------------------------------------------------------------------------
+		case GEM_UPDATE_TEXT:
+		{
+			// the search field of the map list tools
+			mapFavoritesButtons.onTextChanged( (GameWindow *)mData1 );
+			break;
+		}
 
 		default:
 			return MSG_IGNORED;

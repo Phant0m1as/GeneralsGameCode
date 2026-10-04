@@ -50,6 +50,9 @@
 #include "Common/MapObject.h"
 #include "Common/UserPreferences.h"
 #include "Common/Registry.h"
+#include "GameClient/GadgetTextEntry.h"
+
+#include <wctype.h>
 #include "GameClient/GameText.h"
 #include "GameClient/WindowLayout.h"
 #include "GameClient/Gadget.h"
@@ -761,6 +764,8 @@ enum MapFavoritesText
 	MAP_FAVORITES_TEXT_REMOVE,
 	MAP_FAVORITES_TEXT_FILTER_OFF,
 	MAP_FAVORITES_TEXT_FILTER_ON,
+	MAP_FAVORITES_TEXT_SEARCH_TOOLTIP,
+	MAP_FAVORITES_TEXT_CLEAR_SEARCH_TOOLTIP,
 	MAP_FAVORITES_TEXT_COUNT
 };
 
@@ -770,6 +775,8 @@ static const wchar_t *const s_mapFavoritesTextsGerman[MAP_FAVORITES_TEXT_COUNT] 
 	L"Kein Favorit",
 	L"Nur Favoriten: Aus",
 	L"Nur Favoriten: An",
+	L"Map-Namen filtern",
+	L"Suche l\u00F6schen",
 };
 
 static const wchar_t *const s_mapFavoritesTextsEnglish[MAP_FAVORITES_TEXT_COUNT] =
@@ -778,12 +785,77 @@ static const wchar_t *const s_mapFavoritesTextsEnglish[MAP_FAVORITES_TEXT_COUNT]
 	L"Remove Favorite",
 	L"Favorites Only: Off",
 	L"Favorites Only: On",
+	L"Filter map names",
+	L"Clear search",
 };
 
 static UnicodeString getMapFavoritesText( MapFavoritesText text )
 {
 	const Bool isGerman = GetRegistryLanguage().compareNoCase("german") == 0;
 	return UnicodeString( isGerman ? s_mapFavoritesTextsGerman[text] : s_mapFavoritesTextsEnglish[text] );
+}
+
+//-------------------------------------------------------------------------------------------------
+// Map search
+//-------------------------------------------------------------------------------------------------
+
+// Size of the map list tools relative to a normal menu button. Change to taste.
+static const Real s_mapListToolsHeightScale = 0.7f;	// height of search field and favorites buttons
+static const Int s_mapListToolsFontSizeReduction = 2;	// font size, in points smaller than the buttons
+
+// Maximum number of characters in the search field.
+enum { MAP_SEARCH_TEXT_LEN = 40 };
+
+// The search text, always stored in lower case. A plain array is used on purpose to avoid static
+// objects with constructors and destructors, which do not mix well with the game's memory manager.
+static WideChar s_mapSearchText[MAP_SEARCH_TEXT_LEN + 1] = { 0 };
+
+// TRUE while a map listbox is refilled because of a map list tool. Then the selected map stays
+// selected if it is still in the list, otherwise nothing is selected.
+static Bool s_mapListKeepSelectionOnly = FALSE;
+
+static WideChar toLowerWideChar( WideChar c )
+{
+	return (WideChar)towlower( (wint_t)c );
+}
+
+static void setMapSearchText( const UnicodeString& text )
+{
+	const WideChar *src = text.str();
+	Int i = 0;
+	for (; src != nullptr && src[i] != 0 && i < MAP_SEARCH_TEXT_LEN; ++i)
+	{
+		s_mapSearchText[i] = toLowerWideChar( src[i] );
+	}
+	s_mapSearchText[i] = 0;
+}
+
+Bool isMapSearchActive()
+{
+	return s_mapSearchText[0] != 0;
+}
+
+/// Returns TRUE if name contains the search text, ignoring upper and lower case.
+static Bool mapNameMatchesSearch( const UnicodeString& name )
+{
+	if (!isMapSearchActive())
+		return TRUE;
+
+	const WideChar *str = name.str();
+	if (str == nullptr)
+		return FALSE;
+
+	for (; *str != 0; ++str)
+	{
+		Int i = 0;
+		while (s_mapSearchText[i] != 0 && str[i] != 0 && toLowerWideChar( str[i] ) == s_mapSearchText[i])
+		{
+			++i;
+		}
+		if (s_mapSearchText[i] == 0)
+			return TRUE;
+	}
+	return FALSE;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -974,6 +1046,12 @@ static Bool addMapToMapListbox(
 			return true;
 		}
 
+		// Skip maps that do not match the search text.
+		if (!mapNameMatchesSearch( mapMetaData.m_displayName ))
+		{
+			return true;
+		}
+
 		const Color textColor = isFavorite ? s_mapFavoriteColor : lbData.color;
 
 		UnicodeString mapDisplayName;
@@ -1113,6 +1191,14 @@ Int populateMapListboxNoReset( GameWindow *listbox, Bool useSystemMaps, Bool isM
 	lbData.favorites = &favorites;
 	lbData.favoritesOnly = getMapFavoritesFilter();
 
+	// While searching, or when refilled by a map list tool, the selection only changes by a click of
+	// the player: the selected map stays selected if it is still in the list, otherwise nothing is.
+	const Bool keepSelectionOnly = s_mapListKeepSelectionOnly || isMapSearchActive();
+	if (keepSelectionOnly)
+	{
+		lbData.selectionIndex = -1;
+	}
+
 	if (lbData.numColumns > 1)
 	{
 		lbData.easyImage = TheMappedImageCollection->findImageByName("Star-Bronze");
@@ -1163,6 +1249,12 @@ Int populateMapListboxNoReset( GameWindow *listbox, Bool useSystemMaps, Bool isM
 	if (lbData.favoritesOnly && GadgetListBoxGetNumEntries(listbox) == 0)
 	{
 		lbData.selectionIndex = -1;
+	}
+
+	// Some menus fill the listbox in two passes. Keep a selection made by an earlier pass.
+	if (keepSelectionOnly && lbData.selectionIndex < 0)
+	{
+		GadgetListBoxGetSelected(listbox, &lbData.selectionIndex);
 	}
 
 	GadgetListBoxSetSelected(listbox, &lbData.selectionIndex, 1);
@@ -1565,10 +1657,27 @@ void findDrawPositions( Int startX, Int startY, Int width, Int height, Region3D 
 //-------------------------------------------------------------------------------------------------
 
 //-------------------------------------------------------------------------------------------------
+/** Returns a font like the template font, but smaller. */
+//-------------------------------------------------------------------------------------------------
+static GameFont *getMapListToolsFont( GameWindow *templateButton )
+{
+	GameFont *templateFont = templateButton->winGetFont();
+	if (templateFont == nullptr)
+		return nullptr;
+
+	Int pointSize = templateFont->pointSize - s_mapListToolsFontSizeReduction;
+	if (pointSize < 8)
+		pointSize = 8;
+
+	GameFont *font = TheWindowManager->winFindFont( templateFont->nameString, pointSize, templateFont->bold );
+	return font != nullptr ? font : templateFont;
+}
+
+//-------------------------------------------------------------------------------------------------
 /** Creates a push button that looks like templateButton. */
 //-------------------------------------------------------------------------------------------------
 static GameWindow *createMapFavoritesButton( GameWindow *parent, GameWindow *owner, GameWindow *templateButton,
-	Int x, Int y, Int width, Int height )
+	GameFont *font, Int x, Int y, Int width, Int height )
 {
 	WinInstanceData *templateData = templateButton->winGetInstanceData();
 
@@ -1591,7 +1700,7 @@ static GameWindow *createMapFavoritesButton( GameWindow *parent, GameWindow *own
 	const UnsignedInt status = WIN_STATUS_ENABLED | (templateButton->winGetStatus() & WIN_STATUS_IMAGE);
 
 	GameWindow *button = TheWindowManager->gogoGadgetPushButton( parent, status, x, y, width, height,
-		&instData, templateButton->winGetFont(), FALSE );
+		&instData, font, FALSE );
 
 	// Button clicks are sent to the owner. Use the same owner as the map listbox,
 	// so that the menu's system callback receives them.
@@ -1602,17 +1711,74 @@ static GameWindow *createMapFavoritesButton( GameWindow *parent, GameWindow *own
 }
 
 //-------------------------------------------------------------------------------------------------
+/** Creates the search text entry field. */
+//-------------------------------------------------------------------------------------------------
+static GameWindow *createMapSearchEntry( GameWindow *parent, GameWindow *owner, GameWindow *templateButton,
+	GameFont *font, Int x, Int y, Int width, Int height )
+{
+	WinInstanceData *templateData = templateButton->winGetInstanceData();
+
+	WinInstanceData instData;
+	instData.init();
+	BitSet( instData.m_style, GWS_ENTRY_FIELD | GWS_MOUSE_TRACK );
+
+	// Dark background with a gray border, text in the colors of the menu buttons.
+	const Color background = GameMakeColor( 0, 0, 0, 160 );
+	const Color border = GameMakeColor( 120, 120, 120, 255 );
+	const Color hiliteBorder = GameMakeColor( 200, 200, 200, 255 );
+	instData.m_enabledDrawData[0].color = background;
+	instData.m_enabledDrawData[0].borderColor = border;
+	instData.m_hiliteDrawData[0].color = background;
+	instData.m_hiliteDrawData[0].borderColor = hiliteBorder;
+	instData.m_disabledDrawData[0].color = background;
+	instData.m_disabledDrawData[0].borderColor = border;
+
+	instData.m_enabledText = templateData->m_enabledText;
+	instData.m_hiliteText = templateData->m_enabledText;
+	instData.m_disabledText = templateData->m_disabledText;
+	instData.m_imeCompositeText = templateData->m_enabledText;
+	if (instData.m_enabledText.color == WIN_COLOR_UNDEFINED)
+	{
+		instData.m_enabledText.color = GameMakeColor( 255, 255, 255, 255 );
+		instData.m_hiliteText.color = GameMakeColor( 255, 255, 255, 255 );
+		instData.m_imeCompositeText.color = GameMakeColor( 255, 255, 255, 255 );
+	}
+
+	instData.setTooltipText( getMapFavoritesText( MAP_FAVORITES_TEXT_SEARCH_TOOLTIP ) );
+
+	EntryData entryData;
+	memset( &entryData, 0, sizeof(entryData) );
+	entryData.maxTextLen = MAP_SEARCH_TEXT_LEN;
+
+	GameWindow *entry = TheWindowManager->gogoGadgetTextEntry( parent, WIN_STATUS_ENABLED, x, y, width, height,
+		&instData, &entryData, font, FALSE );
+
+	// Text changes are sent to the owner. Use the same owner as the map listbox,
+	// so that the menu's system callback receives them.
+	if (entry != nullptr && owner != nullptr)
+		entry->winSetOwner( owner );
+
+	return entry;
+}
+
+//-------------------------------------------------------------------------------------------------
 MapFavoritesButtons::MapFavoritesButtons()
 	: m_listbox(nullptr)
 	, m_buttonFavorite(nullptr)
 	, m_buttonFilter(nullptr)
+	, m_searchEntry(nullptr)
+	, m_buttonClearSearch(nullptr)
+	, m_repopulate(nullptr)
 {
 }
 
 //-------------------------------------------------------------------------------------------------
-void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateButton )
+void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate )
 {
 	clear();
+
+	// The search text is never kept between two visits of the menu.
+	setMapSearchText( UnicodeString::TheEmptyString );
 
 	if (mapListbox == nullptr || templateButton == nullptr)
 		return;
@@ -1628,27 +1794,47 @@ void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateBu
 	Int templateWidth, templateHeight;
 	templateButton->winGetSize( &templateWidth, &templateHeight );
 
-	const Int gap = 4;
-	Int buttonHeight = templateHeight;
-	if (buttonHeight > listHeight / 4)
-		buttonHeight = listHeight / 4;
-	if (buttonHeight < 10 || listWidth < 40)
+	const Int gap = 3;
+	Int rowHeight = REAL_TO_INT( templateHeight * s_mapListToolsHeightScale );
+	if (rowHeight > listHeight / 6)
+		rowHeight = listHeight / 6;
+	if (rowHeight < 10 || listWidth < 60)
 		return; // Not enough room. Leave the menu as it is.
 
-	// Make room below the listbox. The buttons take the freed space, so they cannot overlap
-	// anything else in the menu.
-	mapListbox->winSetSize( listWidth, listHeight - buttonHeight - gap );
+	// Make room above (search row) and below (favorites row) the listbox. The tools take the freed
+	// space, so they cannot overlap anything else in the menu.
+	const Int newListY = listY + rowHeight + gap;
+	const Int newListHeight = listHeight - 2 * (rowHeight + gap);
+	mapListbox->winSetPosition( listX, newListY );
+	mapListbox->winSetSize( listWidth, newListHeight );
 
-	const Int buttonY = listY + listHeight - buttonHeight;
-	const Int favoriteWidth = (listWidth - gap) / 2;
-	const Int filterWidth = listWidth - favoriteWidth - gap;
+	GameFont *font = getMapListToolsFont( templateButton );
 	GameWindow *owner = mapListbox->winGetOwner();
 
 	m_listbox = mapListbox;
-	m_buttonFavorite = createMapFavoritesButton( parentWindow, owner, templateButton,
-		listX, buttonY, favoriteWidth, buttonHeight );
-	m_buttonFilter = createMapFavoritesButton( parentWindow, owner, templateButton,
-		listX + favoriteWidth + gap, buttonY, filterWidth, buttonHeight );
+	m_repopulate = repopulate;
+
+	// Search row: text entry with a small clear button on its right.
+	const Int clearWidth = rowHeight + 4;
+	const Int entryWidth = listWidth - clearWidth - gap;
+	m_searchEntry = createMapSearchEntry( parentWindow, owner, templateButton, font,
+		listX, listY, entryWidth, rowHeight );
+	m_buttonClearSearch = createMapFavoritesButton( parentWindow, owner, templateButton, font,
+		listX + entryWidth + gap, listY, clearWidth, rowHeight );
+	if (m_buttonClearSearch != nullptr)
+	{
+		GadgetButtonSetText( m_buttonClearSearch, UnicodeString(L"x") );
+		m_buttonClearSearch->winSetTooltip( getMapFavoritesText( MAP_FAVORITES_TEXT_CLEAR_SEARCH_TOOLTIP ) );
+	}
+
+	// Favorites row below the listbox.
+	const Int buttonY = listY + listHeight - rowHeight;
+	const Int favoriteWidth = (listWidth - gap) / 2;
+	const Int filterWidth = listWidth - favoriteWidth - gap;
+	m_buttonFavorite = createMapFavoritesButton( parentWindow, owner, templateButton, font,
+		listX, buttonY, favoriteWidth, rowHeight );
+	m_buttonFilter = createMapFavoritesButton( parentWindow, owner, templateButton, font,
+		listX + favoriteWidth + gap, buttonY, filterWidth, rowHeight );
 
 	updateFilterButtonText();
 	updateFromSelection();
@@ -1660,12 +1846,25 @@ void MapFavoritesButtons::clear()
 	m_listbox = nullptr;
 	m_buttonFavorite = nullptr;
 	m_buttonFilter = nullptr;
+	m_searchEntry = nullptr;
+	m_buttonClearSearch = nullptr;
+	m_repopulate = nullptr;
 }
 
 //-------------------------------------------------------------------------------------------------
-Bool MapFavoritesButtons::isFavoritesButton( const GameWindow *control ) const
+void MapFavoritesButtons::repopulate()
 {
-	return control != nullptr && (control == m_buttonFavorite || control == m_buttonFilter);
+	if (m_repopulate == nullptr)
+		return;
+
+	// Keep the selected map selected if it is still in the list. Otherwise select nothing.
+	const AsciiString mapToSelect = getSelectedMap();
+
+	s_mapListKeepSelectionOnly = TRUE;
+	m_repopulate( mapToSelect );
+	s_mapListKeepSelectionOnly = FALSE;
+
+	updateFromSelection();
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1677,10 +1876,11 @@ Bool MapFavoritesButtons::onButtonSelected( const GameWindow *control )
 	if (control == m_buttonFavorite)
 	{
 		const AsciiString mapName = getSelectedMap();
-		if (mapName.isEmpty())
-			return FALSE;
-
-		setMapFavorite( mapName, !isMapFavorite( mapName ) );
+		if (mapName.isNotEmpty())
+		{
+			setMapFavorite( mapName, !isMapFavorite( mapName ) );
+			repopulate();
+		}
 		return TRUE;
 	}
 
@@ -1688,10 +1888,35 @@ Bool MapFavoritesButtons::onButtonSelected( const GameWindow *control )
 	{
 		setMapFavoritesFilter( !getMapFavoritesFilter() );
 		updateFilterButtonText();
+		repopulate();
+		return TRUE;
+	}
+
+	if (control == m_buttonClearSearch)
+	{
+		if (m_searchEntry != nullptr)
+			GadgetTextEntrySetText( m_searchEntry, UnicodeString::TheEmptyString );
+
+		if (isMapSearchActive())
+		{
+			setMapSearchText( UnicodeString::TheEmptyString );
+			repopulate();
+		}
 		return TRUE;
 	}
 
 	return FALSE;
+}
+
+//-------------------------------------------------------------------------------------------------
+Bool MapFavoritesButtons::onTextChanged( const GameWindow *control )
+{
+	if (control == nullptr || control != m_searchEntry)
+		return FALSE;
+
+	setMapSearchText( GadgetTextEntryGetText( m_searchEntry ) );
+	repopulate();
+	return TRUE;
 }
 
 //-------------------------------------------------------------------------------------------------
