@@ -1046,14 +1046,18 @@ static Bool addMapToMapListbox(
 	{
 		const Bool isFavorite = lbData.favorites != nullptr && lbData.favorites->isFavorite(mapName);
 
+		// The selected map always stays in the list, so that the selection and the map preview are
+		// kept while searching or filtering, until the player clicks another map.
+		const Bool isSelectedMap = lbData.mapToSelect.isNotEmpty() && mapName == lbData.mapToSelect;
+
 		// Skip non-favorites when the favorites filter is active.
-		if (lbData.favoritesOnly && !isFavorite)
+		if (!isSelectedMap && lbData.favoritesOnly && !isFavorite)
 		{
 			return true;
 		}
 
 		// Skip maps that do not match the search text.
-		if (!mapNameMatchesSearch( mapMetaData.m_displayName ))
+		if (!isSelectedMap && !mapNameMatchesSearch( mapMetaData.m_displayName ))
 		{
 			return true;
 		}
