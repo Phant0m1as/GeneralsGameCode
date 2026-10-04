@@ -324,7 +324,8 @@ void SkirmishMapSelectMenuInit( WindowLayout *layout, void *userData )
 	mapList = TheWindowManager->winGetWindowFromId( parent, mapListID );
 	if( mapList )
 	{
-		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ), repopulateMapList );
+		mapFavoritesButtons.create( mapList, TheWindowManager->winGetWindowFromId( parent, buttonBack ), repopulateMapList,
+			TheWindowManager->winGetWindowFromId( parent, radioButtonSystemMapsID ) );
 
 		if (TheMapCache)
 			TheMapCache->updateCache();

@@ -175,7 +175,9 @@ public:
 	/// Creates the search field above and the favorites buttons below the map listbox. The listbox
 	/// is made smaller to make room for them. The buttons copy the look of templateButton.
 	/// Clears the search text. Call before populating the map listbox.
-	void create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate );
+	/// The label in front of the search field uses the font of labelFontTemplate, if given.
+	void create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate,
+		GameWindow *labelFontTemplate = nullptr );
 
 	/// Forgets the window pointers. The windows themselves are destroyed together with the layout.
 	void clear();
