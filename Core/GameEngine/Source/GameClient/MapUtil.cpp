@@ -1825,7 +1825,8 @@ MapFavoritesButtons::MapFavoritesButtons()
 }
 
 //-------------------------------------------------------------------------------------------------
-void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate )
+void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateButton, RepopulateFunc repopulate,
+	GameWindow *labelFontTemplate )
 {
 	clear();
 
@@ -1869,22 +1870,26 @@ void MapFavoritesButtons::create( GameWindow *mapListbox, GameWindow *templateBu
 	// Search row: label, text entry, and a small clear button on the right.
 	const Int clearWidth = rowHeight + 4;
 	const UnicodeString labelText = getMapFavoritesText( MAP_FAVORITES_TEXT_SEARCH_LABEL );
-	Int labelWidth = getTextWidth( font, labelText ) + 4;
+	GameFont *labelFont = (labelFontTemplate != nullptr && labelFontTemplate->winGetFont() != nullptr)
+		? labelFontTemplate->winGetFont() : font;
+	Int labelWidth = getTextWidth( labelFont, labelText ) + 4;
 	if (labelWidth <= 4 || listWidth - labelWidth - clearWidth - 2 * gap < 40)
 		labelWidth = 0; // No room for the label. Show the search field only.
 
+	// The clear button is right aligned with the listbox, the entry field fills the space up to it.
+	const Int clearX = listX + listWidth - clearWidth;
 	const Int entryX = labelWidth > 0 ? listX + labelWidth + gap : listX;
-	const Int entryWidth = listX + listWidth - clearWidth - gap - entryX;
+	const Int entryWidth = clearX - gap - entryX;
 
 	if (labelWidth > 0)
 	{
-		createMapSearchLabel( parentWindow, templateButton, font, labelText,
+		createMapSearchLabel( parentWindow, templateButton, labelFont, labelText,
 			listX, listY, labelWidth, rowHeight );
 	}
 	m_searchEntry = createMapSearchEntry( parentWindow, owner, templateButton, font,
 		entryX, listY, entryWidth, rowHeight );
 	m_buttonClearSearch = createMapFavoritesButton( parentWindow, owner, templateButton, font,
-		listX + entryWidth + gap, listY, clearWidth, rowHeight );
+		clearX, listY, clearWidth, rowHeight );
 	if (m_buttonClearSearch != nullptr)
 	{
 		GadgetButtonSetText( m_buttonClearSearch, UnicodeString(L"x") );
