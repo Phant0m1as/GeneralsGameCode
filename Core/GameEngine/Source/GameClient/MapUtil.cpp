@@ -1198,6 +1198,15 @@ Int populateMapListbox( GameWindow *listbox, Bool useSystemMaps, Bool isMultipla
 	// reset the listbox content
 	GadgetListBoxReset( listbox );
 
+	// The map listboxes in the menu layouts can only hold a fixed number of entries (about 1200).
+	// Players with large map collections would otherwise only see the first part of their maps.
+	// Grow the listbox so that every map in the cache fits. Generals Online does the same.
+	const Int mapCount = (Int)TheMapCache->size();
+	if (mapCount > GadgetListBoxGetListLength( listbox ))
+	{
+		GadgetListBoxSetListLength( listbox, mapCount );
+	}
+
 	return populateMapListboxNoReset( listbox, useSystemMaps, isMultiplayer, mapToSelect );
 }
 
