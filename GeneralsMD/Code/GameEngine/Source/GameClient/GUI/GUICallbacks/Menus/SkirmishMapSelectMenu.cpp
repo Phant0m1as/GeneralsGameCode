@@ -480,7 +480,10 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 					mapFavoritesButtons.updateFromSelection();
 
 					int rowSelected = mData2;
-					if( rowSelected < 0 )
+
+					// Keep showing the chosen map while it is hidden by the search or favorites filter.
+					const AsciiString chosenMap = mapFavoritesButtons.getChosenMap();
+					if( rowSelected < 0 && chosenMap.isEmpty() )
 					{
 						positionStartSpots( AsciiString::TheEmptyString, buttonMapStartPosition, winMapPreview);
 						//winMapPreview->winClearStatus(WIN_STATUS_IMAGE);
@@ -489,11 +492,12 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 					winMapPreview->winSetStatus(WIN_STATUS_IMAGE);
 					UnicodeString map;
 					// get text of the map to load
-					map = GadgetListBoxGetText( mapWindow, rowSelected, 0 );
+					if( rowSelected >= 0 )
+						map = GadgetListBoxGetText( mapWindow, rowSelected, 0 );
 
 					// set the map name in the global data map name
 					AsciiString asciiMap;
-					const char *mapFname = (const char *)GadgetListBoxGetItemData( mapWindow, rowSelected );
+					const char *mapFname = (rowSelected >= 0) ? (const char *)GadgetListBoxGetItemData( mapWindow, rowSelected ) : chosenMap.str();
 					DEBUG_ASSERTCRASH(mapFname, ("No map item data"));
 					if (mapFname)
 						asciiMap = mapFname;
@@ -570,12 +574,14 @@ WindowMsgHandledType SkirmishMapSelectMenuSystem( GameWindow *window, UnsignedIn
 				// get the selected index
 				GadgetListBoxGetSelected( mapWindow, &selected );
 
-				if( selected != -1 )
+				// Use the chosen map if it is hidden by the search or favorites filter.
+				const AsciiString chosenMap = mapFavoritesButtons.getChosenMap();
+				if( selected != -1 || chosenMap.isNotEmpty() )
 				{
 					//buttonPushed = true;
 					// set the map name in the global data map name
 					AsciiString asciiMap;
-					const char *mapFname = (const char *)GadgetListBoxGetItemData( mapWindow, selected );
+					const char *mapFname = (selected != -1) ? (const char *)GadgetListBoxGetItemData( mapWindow, selected ) : chosenMap.str();
 					DEBUG_ASSERTCRASH(mapFname, ("No map item data"));
 					if (mapFname)
 						asciiMap = mapFname;

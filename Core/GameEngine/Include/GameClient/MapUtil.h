@@ -196,6 +196,10 @@ public:
 	/// Returns the file name of the currently selected map, or an empty string.
 	AsciiString getSelectedMap() const;
 
+	/// Returns the map the player chose last. It stays chosen while it is hidden by the search or
+	/// favorites filter, until the player clicks another map. Empty if no map was chosen.
+	AsciiString getChosenMap() const;
+
 private:
 	void updateFilterButtonText();
 	void repopulate();
@@ -206,4 +210,7 @@ private:
 	GameWindow *m_searchEntry;
 	GameWindow *m_buttonClearSearch;
 	RepopulateFunc m_repopulate;
+
+	// A plain array is used on purpose, because the menus keep this object in a static variable.
+	char m_chosenMap[520];
 };
