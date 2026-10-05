@@ -1046,18 +1046,14 @@ static Bool addMapToMapListbox(
 	{
 		const Bool isFavorite = lbData.favorites != nullptr && lbData.favorites->isFavorite(mapName);
 
-		// The selected map always stays in the list, so that the selection and the map preview are
-		// kept while searching or filtering, until the player clicks another map.
-		const Bool isSelectedMap = lbData.mapToSelect.isNotEmpty() && mapName == lbData.mapToSelect;
-
 		// Skip non-favorites when the favorites filter is active.
-		if (!isSelectedMap && lbData.favoritesOnly && !isFavorite)
+		if (lbData.favoritesOnly && !isFavorite)
 		{
 			return true;
 		}
 
 		// Skip maps that do not match the search text.
-		if (!isSelectedMap && !mapNameMatchesSearch( mapMetaData.m_displayName ))
+		if (!mapNameMatchesSearch( mapMetaData.m_displayName ))
 		{
 			return true;
 		}
@@ -1826,6 +1822,7 @@ MapFavoritesButtons::MapFavoritesButtons()
 	, m_buttonClearSearch(nullptr)
 	, m_repopulate(nullptr)
 {
+	m_chosenMap[0] = '\0';
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1923,6 +1920,7 @@ void MapFavoritesButtons::clear()
 	m_searchEntry = nullptr;
 	m_buttonClearSearch = nullptr;
 	m_repopulate = nullptr;
+	m_chosenMap[0] = '\0';
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1931,8 +1929,9 @@ void MapFavoritesButtons::repopulate()
 	if (m_repopulate == nullptr)
 		return;
 
-	// Keep the selected map selected if it is still in the list. Otherwise select nothing.
-	const AsciiString mapToSelect = getSelectedMap();
+	// Select the chosen map again if it is in the list. Otherwise select nothing. The chosen map
+	// stays chosen in either case, so its preview stays and it is used when the player accepts.
+	const AsciiString mapToSelect = getChosenMap();
 
 	s_mapListKeepSelectionOnly = TRUE;
 	m_repopulate( mapToSelect );
@@ -1996,10 +1995,16 @@ Bool MapFavoritesButtons::onTextChanged( const GameWindow *control )
 //-------------------------------------------------------------------------------------------------
 void MapFavoritesButtons::updateFromSelection()
 {
+	const AsciiString mapName = getSelectedMap();
+
+	// A map selected in the list becomes the chosen map. If nothing is selected because the chosen
+	// map is hidden by the search or favorites filter, the chosen map is kept.
+	if (mapName.isNotEmpty())
+		strlcpy( m_chosenMap, mapName.str(), ARRAY_SIZE(m_chosenMap) );
+
 	if (m_buttonFavorite == nullptr)
 		return;
 
-	const AsciiString mapName = getSelectedMap();
 	if (mapName.isEmpty())
 	{
 		GadgetButtonSetText( m_buttonFavorite, getMapFavoritesText(MAP_FAVORITES_TEXT_ADD) );
@@ -2030,6 +2035,12 @@ AsciiString MapFavoritesButtons::getSelectedMap() const
 		return AsciiString::TheEmptyString;
 
 	return AsciiString(mapName);
+}
+
+//-------------------------------------------------------------------------------------------------
+AsciiString MapFavoritesButtons::getChosenMap() const
+{
+	return AsciiString( m_chosenMap );
 }
 
 //-------------------------------------------------------------------------------------------------
