@@ -1,3 +1,25 @@
+# Phantomias-Version – Fork of TheSuperHackers/GeneralsGameCode
+
+This is a fork of [TheSuperHackers/GeneralsGameCode](https://github.com/TheSuperHackers/GeneralsGameCode).
+It serves as a playground and showcase for new features for **Command & Conquer Generals: Zero Hour**.
+It is regularly updated to the latest TheSuperHackers code.
+
+> This is an unofficial fork and not affiliated with TheSuperHackers, Generals Online or EA.
+
+## Features
+
+| Feature | Description | Branch |
+|---|---|---|
+| **Map favorites** | Mark maps as favorites in the Skirmish, LAN and Online map selection and filter the list to show only your favorites. Favorites are shown in gold and stored locally. | `phantomias-version` |
+| **Map search** | Search field above the map list that filters maps by name while you type (case insensitive). Works together with the favorites filter. | `feature-map-search` |
+
+Ready-to-use builds are available on the [Releases](https://github.com/Phant0m1as/GeneralsGameCode/releases) page.
+
+---
+
+*Original README of TheSuperHackers below.*
+
+
 [![GitHub Release](https://img.shields.io/github/v/release/TheSuperHackers/GeneralsGameCode?include_prereleases&sort=date&display_name=tag&style=flat&label=Release)](https://github.com/TheSuperHackers/GeneralsGameCode/releases)
 ![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/TheSuperHackers/GeneralsGameCode/3)
 ![GitHub milestone details](https://img.shields.io/github/milestones/progress-percent/TheSuperHackers/GeneralsGameCode/1)
