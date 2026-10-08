@@ -11,7 +11,7 @@ It is regularly updated to the latest TheSuperHackers code.
 | Feature | Description | Branch |
 |---|---|---|
 | **Map favorites** | Mark maps as favorites in the Skirmish, LAN and Online map selection and filter the list to show only your favorites. Favorites are shown in gold and stored locally. | `phantomias-version` |
-| **Map search** | Search field above the map list that filters maps by name while you type (case insensitive). Works together with the favorites filter. | `feature-map-search` |
+| **Map search** | Search field above the map list that filters maps by name while you type (case insensitive). Works together with the favorites filter. |  `phantomias-version`  |
 
 Ready-to-use builds are available on the [Releases](https://github.com/Phant0m1as/GeneralsGameCode/releases) page.
 
