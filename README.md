@@ -13,7 +13,7 @@ It is regularly updated to the latest TheSuperHackers code.
 | **Map favorites** | Mark maps as favorites in the Skirmish, LAN and Online map selection and filter the list to show only your favorites. Favorites are shown in gold and stored locally. |<img width="250" alt="Feature-Favorite Maps" src="https://github.com/user-attachments/assets/ef20ef5a-014f-4f64-8f6a-2e36d85f1bab" />| `phantomias-version` |
 | **Map search** | Search field above the map list that filters maps by name while you type (case insensitive). Works together with the favorites filter. | <img width="250"  alt="Feature-Map Search" src="https://github.com/user-attachments/assets/3e5cf946-1812-46e7-97e1-ecffe0a7dc17" /> |  `phantomias-version`  |
 
-Ready-to-use builds are available on the [Releases](https://github.com/Phant0m1as/GeneralsGameCode/releases) page.
+Ready-to-use builds are available on the [Releases](https://github.com/Phant0m1as/Generals-Zero-Hour-A-bit-more-user-friendly/releases) page.
 
 ---
 
